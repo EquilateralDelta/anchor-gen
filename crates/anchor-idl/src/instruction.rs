@@ -14,7 +14,9 @@ pub fn generate_ix_handler(ix: &IdlInstruction) -> TokenStream {
         .map(|arg| {
             let name = format_ident!("_{}", arg.name.to_snake_case());
             let type_name = crate::ty_to_rust_type(&arg.ty);
-            let stream: proc_macro2::TokenStream = type_name.parse().unwrap();
+            let stream: proc_macro2::TokenStream = type_name.parse().expect(&format!(
+                "Failed parsing {name} argument for instruction {ix_name}"
+            ));
             quote! {
                 #name: #stream
             }

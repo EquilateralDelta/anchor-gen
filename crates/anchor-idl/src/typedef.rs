@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display};
 
 use anchor_syn::idl::{EnumFields, IdlEnumVariant, IdlField, IdlType, IdlTypeDefinition};
 use heck::ToSnakeCase;
@@ -95,7 +95,10 @@ pub fn get_type_properties(defs: &[IdlTypeDefinition], ty: &IdlType) -> FieldLis
             can_derive_default: true,
         },
         IdlType::Defined(inner) => {
-            let def = defs.iter().find(|def| def.name == *inner).unwrap();
+            let def = defs
+                .iter()
+                .find(|def| def.name == *inner)
+                .expect(&format!("Failed to find defined type with name {inner}"));
             match &def.ty {
                 anchor_syn::idl::IdlTypeDefinitionTy::Struct { fields } => {
                     get_field_list_properties(defs, fields)
@@ -118,11 +121,13 @@ pub fn get_type_properties(defs: &[IdlTypeDefinition], ty: &IdlType) -> FieldLis
 }
 
 /// Generates struct fields from a list of [IdlField]s.
-pub fn generate_fields(fields: &[IdlField]) -> TokenStream {
+pub fn generate_fields(struct_name: impl Display, fields: &[IdlField]) -> TokenStream {
     let fields_rendered = fields.iter().map(|arg| {
         let name = format_ident!("{}", arg.name.to_snake_case());
         let type_name = crate::ty_to_rust_type(&arg.ty);
-        let stream: proc_macro2::TokenStream = type_name.parse().unwrap();
+        let stream: proc_macro2::TokenStream = type_name.parse().expect(&format!(
+            "Failed parsing {name} field for a struct {struct_name}"
+        ));
         quote! {
             pub #name: #stream
         }
@@ -139,7 +144,7 @@ pub fn generate_struct(
     fields: &[IdlField],
     opts: StructOpts,
 ) -> TokenStream {
-    let fields_rendered = generate_fields(fields);
+    let fields_rendered = generate_fields(struct_name, fields);
     let props = get_field_list_properties(defs, fields);
 
     let derive_default = if props.can_derive_default {
@@ -204,7 +209,13 @@ pub fn generate_enum(
         quote! {}
     };
 
-    let default_variant = format_ident!("{}", variants.first().unwrap().name);
+    let default_variant = format_ident!(
+        "{}",
+        variants
+            .first()
+            .expect(&format!("Enum {enum_name} is missing any variants"))
+            .name
+    );
 
     quote! {
         #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
